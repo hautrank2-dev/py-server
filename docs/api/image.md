@@ -43,39 +43,48 @@ curl -X POST http://localhost:8000/api/image/convert \
 
 ## POST `/api/image/remove-bg`
 
-Xoá nền ảnh bằng AI (thư viện [`rembg`](https://github.com/danielgatis/rembg), model ONNX U2Net).
-Kết quả luôn là **PNG có nền trong suốt**.
+Xoá nền một hoặc nhiều ảnh bằng AI (thư viện [`rembg`](https://github.com/danielgatis/rembg), model ONNX U2Net).
+Kết quả trả về **file ZIP**, mỗi ảnh là PNG nền trong suốt.
 
 ### Request — `multipart/form-data`
 
-| Field           | Kiểu    | Bắt buộc | Mặc định | Mô tả |
-|-----------------|---------|----------|----------|-------|
-| `file`          | file    | ✅       | —        | Ảnh nguồn (avatar) |
-| `model`         | string  | ❌       | `u2net`  | Model rembg: `u2net` (mặc định, tốt cho người), `u2netp` (nhẹ/nhanh), `isnet-general-use` |
-| `alpha_matting` | boolean | ❌       | `false`  | Bật alpha matting cho viền mượt hơn (chậm hơn) |
+Mỗi phần là một cặp `key → file`. **`key` chính là field name** trong `FormData`, và được dùng làm tên file trong zip.
+
+```js
+const fd = new FormData();
+fd.append("avatar1", file1);   // -> avatar1.png
+fd.append("avatar2", file2);   // -> avatar2.png
+```
+
+| Phần    | Kiểu | Mô tả |
+|---------|------|-------|
+| `<key>` | file | Ảnh nguồn. Gửi bao nhiêu phần cũng được, mỗi phần một key. Chỉ cần 1 phần cho trường hợp 1 ảnh. |
+
+> Model mặc định `u2net` (endpoint chưa nhận tham số `model`/`alpha_matting`).
 
 ### Response — `200 OK`
 
-- **Content-Type:** `image/png`
-- **Header:** `Content-Disposition: attachment; filename="<tên>_nobg.png"`
-- **Body:** ảnh PNG (RGBA, nền trong suốt)
+- **Content-Type:** `application/zip`
+- **Header:** `Content-Disposition: attachment; filename="avatars-nobg.zip"`
+- **Body:** file zip, mỗi ảnh đã xoá nền có tên `<key>.png` (nếu key trùng nhau sẽ thành `<key>_1.png`, `<key>_2.png`…).
 
 ### Ví dụ
 
+Nhiều ảnh:
+
 ```bash
 curl -X POST http://localhost:8000/api/image/remove-bg \
-  -F "file=@avatar.jpg" \
-  -F "model=u2net" \
-  -o avatar_nobg.png
+  -F "avatar1=@a.jpg" \
+  -F "avatar2=@b.jpg" \
+  -o avatars-nobg.zip
 ```
 
-Bật alpha matting cho viền mượt hơn:
+Một ảnh (vẫn trả về zip chứa 1 file):
 
 ```bash
 curl -X POST http://localhost:8000/api/image/remove-bg \
-  -F "file=@avatar.jpg" \
-  -F "alpha_matting=true" \
-  -o avatar_nobg.png
+  -F "avatar=@avatar.jpg" \
+  -o avatars-nobg.zip
 ```
 
 ### Ghi chú
@@ -83,6 +92,7 @@ curl -X POST http://localhost:8000/api/image/remove-bg \
 - Lần chạy đầu, `rembg` tự tải model (`u2net.onnx` ~176MB) về `$U2NET_HOME` (mặc định `~/.u2net`). Trong Docker model đã được bake sẵn nên request đầu không phải chờ.
 - Session của mỗi model được cache trong bộ nhớ (`lru_cache`) nên không load lại mỗi request.
 - Mỗi worker giữ một bản model trong RAM (~200–300MB) — cân nhắc khi tăng số worker.
+- Ảnh được xử lý **tuần tự** trong một request.
 
 ---
 
