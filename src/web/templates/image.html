@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Image — AI Media Server{% endblock %}
+
+{% block content %}
+<div class="breadcrumb"><a href="/">Trang chủ</a> / Image</div>
+
+<h1 class="section-title" style="margin-top:0">Công cụ xử lý ảnh</h1>
+<p class="section-sub">Chọn một tính năng để dùng thử ngay trên trình duyệt.</p>
+
+<div class="grid">
+  <a class="card" href="/image/remove-bg">
+    <div class="emoji">✂️</div>
+    <h3>Xoá nền ảnh</h3>
+    <p>Upload một hoặc nhiều ảnh, AI tách nền và trả về PNG trong suốt (tải cả gói ZIP).</p>
+    <span class="tag">POST /api/image/remove-bg</span>
+  </a>
+
+  <a class="card" href="/image/convert">
+    <div class="emoji">🔄</div>
+    <h3>Đổi định dạng</h3>
+    <p>Chuyển ảnh sang jpg / png / webp / bmp / tiff, chỉnh chất lượng nén.</p>
+    <span class="tag">POST /api/image/convert</span>
+  </a>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}AI Media Server{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">🖼️ AI Media</a>
+      <nav class="links">
+        <a href="/" class="{{ 'active' if active == 'home' else '' }}">Trang chủ</a>
+        <a href="/image" class="{{ 'active' if active == 'image' else '' }}">Image</a>
+        <a href="/docs" target="_blank">API Docs</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    Built with FastAPI + rembg · Demo AI Media Server
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

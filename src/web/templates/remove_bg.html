@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Xoá nền ảnh — AI Media Server{% endblock %}
+
+{% block content %}
+<div class="breadcrumb"><a href="/">Trang chủ</a> / <a href="/image">Image</a> / Xoá nền</div>
+
+<div class="tool">
+  <div class="panel">
+    <h2>✂️ Xoá nền ảnh</h2>
+    <p class="hint">Upload 1 hoặc nhiều ảnh. Mỗi ảnh có một <b>key</b> (dùng làm tên file kết quả). Gọi <code>POST /api/image/remove-bg</code>, nhận về ZIP.</p>
+
+    <form id="form">
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept="image/*" multiple />
+        <span>Kéo thả ảnh vào đây hoặc <strong>bấm để chọn</strong> (chọn được nhiều)</span>
+      </label>
+
+      <div class="filelist" id="filelist"></div>
+
+      <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-weight:600;font-size:.92rem;cursor:pointer">
+        <input type="checkbox" id="crop" style="width:auto" />
+        Cắt sát chủ thể (bỏ viền trong suốt quanh 4 cạnh)
+      </label>
+
+      <button type="submit" class="btn btn-primary" id="submit" style="margin-top:18px" disabled>Xoá nền</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Kết quả</h2>
+    <p class="hint">Ảnh đã xoá nền (nền ô caro = trong suốt).</p>
+    <div id="downloadAllWrap"></div>
+    <div class="results" id="results">
+      <p style="color:var(--muted)">Chưa có kết quả.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+const fileInput = $("file"), fileListEl = $("filelist"), statusEl = $("status");
+const resultsEl = $("results"), submitBtn = $("submit"), drop = $("drop");
+
+let items = []; // { file, url, key }
+
+function sanitizeKey(name) {
+  return name.replace(/\.[^.]+$/, "").replace(/[^\w.-]+/g, "_").slice(0, 60) || "image";
+}
+// đảm bảo key duy nhất để tên file trong zip khớp khi hiển thị
+function ensureUniqueKeys() {
+  const seen = {};
+  items.forEach(it => {
+    let k = it.key || "image", base = k, i = 1;
+    while (seen[k]) k = `${base}_${i++}`;
+    seen[k] = true; it.key = k;
+  });
+}
+
+function render() {
+  ensureUniqueKeys();
+  fileListEl.innerHTML = items.map((it, idx) => `
+    <div class="filerow">
+      <img src="${it.url}" alt="" />
+      <div class="key">
+        <label>Key → tên file kết quả</label>
+        <input type="text" value="${it.key}" data-idx="${idx}" />
+      </div>
+      <button type="button" class="iconbtn" data-del="${idx}" title="Bỏ">✕</button>
+    </div>
+  `).join("");
+  submitBtn.disabled = items.length === 0;
+
+  fileListEl.querySelectorAll("input[data-idx]").forEach(inp => {
+    inp.addEventListener("input", () => { items[+inp.dataset.idx].key = inp.value.trim(); });
+  });
+  fileListEl.querySelectorAll("button[data-del]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = +btn.dataset.del;
+      URL.revokeObjectURL(items[i].url);
+      items.splice(i, 1); render();
+    });
+  });
+}
+
+function addFiles(fileList) {
+  for (const f of fileList) {
+    if (!f.type.startsWith("image/")) continue;
+    items.push({ file: f, url: URL.createObjectURL(f), key: sanitizeKey(f.name) });
+  }
+  render();
+}
+
+fileInput.addEventListener("change", () => { addFiles(fileInput.files); fileInput.value = ""; });
+["dragover","dragenter"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add("dragover"); }));
+["dragleave"].forEach(e => drop.addEventListener(e, () => drop.classList.remove("dragover")));
+drop.addEventListener("drop", ev => { ev.preventDefault(); drop.classList.remove("dragover"); addFiles(ev.dataTransfer.files); });
+
+/* ---------- Giải nén ZIP bằng API trình duyệt (không cần thư viện) ---------- */
+async function inflateRaw(bytes) {
+  const ds = new DecompressionStream("deflate-raw");
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function unzip(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  const bytes = new Uint8Array(arrayBuffer);
+  const dec = new TextDecoder();
+  const out = [];
+  let off = 0;
+  while (off + 4 <= view.byteLength && view.getUint32(off, true) === 0x04034b50) {
+    const method = view.getUint16(off + 8, true);
+    const compSize = view.getUint32(off + 18, true);
+    const nameLen = view.getUint16(off + 26, true);
+    const extraLen = view.getUint16(off + 28, true);
+    const nameStart = off + 30;
+    const name = dec.decode(bytes.subarray(nameStart, nameStart + nameLen));
+    const dataStart = nameStart + nameLen + extraLen;
+    const comp = bytes.subarray(dataStart, dataStart + compSize);
+    const data = method === 0 ? comp : await inflateRaw(comp);
+    out.push({ name, blob: new Blob([data], { type: "image/png" }) });
+    off = dataStart + compSize;
+  }
+  return out;
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!items.length) return;
+  ensureUniqueKeys();
+
+  const fd = new FormData();
+  items.forEach(it => fd.append(it.key, it.file, it.file.name));
+  fd.append("crop", $("crop").checked);
+
+  submitBtn.disabled = true;
+  statusEl.className = "status busy";
+  statusEl.innerHTML = `<span class="spinner"></span>Đang xoá nền ${items.length} ảnh…`;
+  resultsEl.innerHTML = "";
+  $("downloadAllWrap").innerHTML = "";
+
+  try {
+    const res = await fetch("/api/image/remove-bg", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "Lỗi không xác định");
+    }
+    const zipBlob = await res.blob();
+    const zipUrl = URL.createObjectURL(zipBlob);
+    const files = await unzip(await zipBlob.arrayBuffer());
+
+    resultsEl.innerHTML = files.map(f => {
+      const url = URL.createObjectURL(f.blob);
+      return `
+        <div class="result-item">
+          <div class="imgwrap checker"><img src="${url}" alt="${f.name}" /></div>
+          <div class="meta">
+            <span class="name" title="${f.name}">${f.name}</span>
+            <a class="btn btn-ghost" style="padding:5px 12px;font-size:.8rem" href="${url}" download="${f.name}">⬇️</a>
+          </div>
+        </div>`;
+    }).join("");
+
+    $("downloadAllWrap").innerHTML =
+      `<a class="btn btn-primary" style="margin-bottom:16px" href="${zipUrl}" download="avatars-nobg.zip">⬇️ Tải tất cả (ZIP)</a>`;
+
+    statusEl.className = "status ok";
+    statusEl.textContent = `✓ Xong ${files.length} ảnh!`;
+  } catch (err) {
+    statusEl.className = "status err";
+    statusEl.textContent = "✗ " + err.message;
+    resultsEl.innerHTML = `<p style="color:var(--muted)">Không có kết quả.</p>`;
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

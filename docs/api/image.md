@@ -56,9 +56,10 @@ fd.append("avatar1", file1);   // -> avatar1.png
 fd.append("avatar2", file2);   // -> avatar2.png
 ```
 
-| Phần    | Kiểu | Mô tả |
-|---------|------|-------|
-| `<key>` | file | Ảnh nguồn. Gửi bao nhiêu phần cũng được, mỗi phần một key. Chỉ cần 1 phần cho trường hợp 1 ảnh. |
+| Phần    | Kiểu    | Mặc định | Mô tả |
+|---------|---------|----------|-------|
+| `<key>` | file    | —        | Ảnh nguồn. Gửi bao nhiêu phần cũng được, mỗi phần một key. Chỉ cần 1 phần cho trường hợp 1 ảnh. |
+| `crop`  | boolean | `false`  | Cắt sát chủ thể — bỏ phần trong suốt thừa quanh 4 cạnh. Áp dụng cho tất cả ảnh trong request. |
 
 > Model mặc định `u2net` (endpoint chưa nhận tham số `model`/`alpha_matting`).
 
@@ -84,6 +85,15 @@ Một ảnh (vẫn trả về zip chứa 1 file):
 ```bash
 curl -X POST http://localhost:8000/api/image/remove-bg \
   -F "avatar=@avatar.jpg" \
+  -o avatars-nobg.zip
+```
+
+Cắt sát chủ thể:
+
+```bash
+curl -X POST http://localhost:8000/api/image/remove-bg \
+  -F "avatar=@avatar.jpg" \
+  -F "crop=true" \
   -o avatars-nobg.zip
 ```
 

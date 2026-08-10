@@ -91,6 +91,7 @@ def remove_bg(
     filename: str = "image",
     model: str = DEFAULT_MODEL,
     alpha_matting: bool = False,
+    crop: bool = False,
 ):
     """
     Xoá nền của ảnh, trả về ảnh PNG có nền trong suốt.
@@ -100,6 +101,7 @@ def remove_bg(
         filename (str): tên gốc của ảnh (không bắt buộc)
         model (str): tên model rembg (u2net, u2netp, isnet-general-use, ...)
         alpha_matting (bool): bật alpha matting cho viền mượt hơn (chậm hơn)
+        crop (bool): cắt sát chủ thể — bỏ phần trong suốt thừa quanh 4 cạnh
 
     Returns:
         (BytesIO, str, str): buffer, content_type, out_filename
@@ -123,6 +125,12 @@ def remove_bg(
     )
 
     out = out.convert("RGBA")  # đảm bảo có kênh alpha (nền trong suốt)
+
+    if crop:
+        # Bounding box của vùng không trong suốt (alpha > 0) rồi cắt sát chủ thể.
+        bbox = out.getchannel("A").getbbox()
+        if bbox:
+            out = out.crop(bbox)
 
     buf = BytesIO()
     out.save(buf, format="PNG")  # PNG để giữ nền trong suốt

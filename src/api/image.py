@@ -41,9 +41,13 @@ async def remove_bg_endpoint(request: Request):
     Xoá nền một hoặc nhiều ảnh, trả về file ZIP.
 
     Body: multipart/form-data, mỗi phần là { key: <tên>, file: <ảnh> }.
+    Có thể gửi thêm field `crop` (true/false) để cắt sát chủ thể.
     Response: file ZIP, mỗi ảnh đã xoá nền được đặt tên "<key>.png".
     """
     form = await request.form()
+
+    # Field cấu hình dùng chung cho cả batch (không phải file).
+    crop = str(form.get("crop", "")).strip().lower() in ("1", "true", "on", "yes")
 
     # Chỉ lấy các phần là file; key chính là field name trong FormData.
     files = [(key, value) for key, value in form.multi_items()
@@ -61,7 +65,7 @@ async def remove_bg_endpoint(request: Request):
                 raise HTTPException(status_code=400, detail=f"Empty file for key '{key}'")
 
             try:
-                buf, _, _ = image_service.remove_bg(raw, filename=key)
+                buf, _, _ = image_service.remove_bg(raw, filename=key, crop=crop)
             except ValueError as ve:
                 raise HTTPException(status_code=400, detail=f"[{key}] {ve}")
             except Exception as e:

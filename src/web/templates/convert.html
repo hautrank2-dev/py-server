@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Đổi định dạng — AI Media Server{% endblock %}
+
+{% block content %}
+<div class="breadcrumb"><a href="/">Trang chủ</a> / <a href="/image">Image</a> / Đổi định dạng</div>
+
+<div class="tool">
+  <div class="panel">
+    <h2>🔄 Đổi định dạng ảnh</h2>
+    <p class="hint">Chuyển ảnh sang định dạng khác. Gọi <code>POST /api/image/convert</code>.</p>
+
+    <form id="form">
+      <div class="field">
+        <label>Ảnh nguồn</label>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept="image/*" required />
+          <span id="dropText">Kéo thả ảnh vào đây hoặc <strong>bấm để chọn</strong></span>
+        </label>
+      </div>
+
+      <div class="field">
+        <label>Định dạng đầu ra</label>
+        <select id="ext">
+          <option value="png">PNG</option>
+          <option value="jpg">JPG</option>
+          <option value="webp">WEBP</option>
+          <option value="bmp">BMP</option>
+          <option value="tiff">TIFF</option>
+        </select>
+      </div>
+
+      <div class="field" id="qualityField">
+        <label>Chất lượng: <span id="qVal">90</span></label>
+        <input type="range" id="quality" min="1" max="100" value="90" />
+      </div>
+
+      <button type="submit" class="btn btn-primary" id="submit">Chuyển đổi</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Kết quả</h2>
+    <p class="hint">Ảnh sau khi chuyển đổi sẽ hiện ở đây.</p>
+    <div id="result">
+      <p style="color:var(--muted)">Chưa có kết quả.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = (id) => document.getElementById(id);
+const fileInput = $("file"), ext = $("ext"), quality = $("quality");
+const statusEl = $("status"), resultEl = $("result"), dropText = $("dropText");
+
+// hiện/ẩn ô chất lượng theo định dạng
+function toggleQuality() {
+  const show = ["jpg", "jpeg", "webp"].includes(ext.value);
+  $("qualityField").style.display = show ? "" : "none";
+}
+ext.addEventListener("change", toggleQuality);
+toggleQuality();
+
+quality.addEventListener("input", () => $("qVal").textContent = quality.value);
+
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) dropText.innerHTML = "📎 " + fileInput.files[0].name;
+});
+// drag styling
+const drop = $("drop");
+["dragover","dragenter"].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add("dragover"); }));
+["dragleave","drop"].forEach(e => drop.addEventListener(e, () => drop.classList.remove("dragover")));
+
+function filenameFromDisposition(h, fallback) {
+  const m = /filename="?([^"]+)"?/.exec(h || "");
+  return m ? m[1] : fallback;
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("ext", ext.value);
+  fd.append("quality", quality.value);
+
+  $("submit").disabled = true;
+  statusEl.className = "status busy";
+  statusEl.innerHTML = '<span class="spinner"></span>Đang chuyển đổi…';
+
+  try {
+    const res = await fetch("/api/image/convert", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "Lỗi không xác định");
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const name = filenameFromDisposition(res.headers.get("Content-Disposition"), "output." + ext.value);
+
+    const canPreview = ["png","jpg","jpeg","webp"].includes(ext.value);
+    resultEl.innerHTML = `
+      ${canPreview ? `<img class="preview-img" src="${url}" alt="result" />` : `<p style="color:var(--muted)">Định dạng ${ext.value.toUpperCase()} không xem trước được trên trình duyệt.</p>`}
+      <a class="btn btn-primary" style="margin-top:16px" href="${url}" download="${name}">⬇️ Tải ${name}</a>
+    `;
+    statusEl.className = "status ok";
+    statusEl.textContent = "✓ Xong!";
+  } catch (err) {
+    statusEl.className = "status err";
+    statusEl.textContent = "✗ " + err.message;
+  } finally {
+    $("submit").disabled = false;
+  }
+});
+</script>
+{% endblock %}

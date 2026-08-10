@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}AI Media Server — Demo{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>AI Media Server</h1>
+  <p>Bộ công cụ xử lý ảnh bằng AI: đổi định dạng và xoá nền ảnh (background removal) tự động — chạy trên FastAPI + rembg.</p>
+  <div class="cta">
+    <a href="/image" class="btn btn-light">🚀 Dùng thử Image</a>
+    <a href="/docs" target="_blank" class="btn btn-ghost">📘 Xem API Docs</a>
+  </div>
+</section>
+
+<h2 class="section-title">Tính năng</h2>
+<p class="section-sub">Các domain xử lý media hiện có.</p>
+
+<div class="grid">
+  <a class="card" href="/image/remove-bg">
+    <div class="emoji">✂️</div>
+    <h3>Xoá nền ảnh</h3>
+    <p>Tách chủ thể khỏi nền bằng model AI U2Net, trả về PNG nền trong suốt. Hỗ trợ nhiều ảnh cùng lúc.</p>
+    <span class="tag">POST /api/image/remove-bg</span>
+  </a>
+
+  <a class="card" href="/image/convert">
+    <div class="emoji">🔄</div>
+    <h3>Đổi định dạng</h3>
+    <p>Chuyển ảnh sang jpg, png, webp, bmp, tiff với tuỳ chọn chất lượng.</p>
+    <span class="tag">POST /api/image/convert</span>
+  </a>
+
+  <div class="card" style="opacity:.7">
+    <div class="emoji">🎬</div>
+    <h3>Video <span style="font-size:.7rem;color:var(--muted)">(sắp có)</span></h3>
+    <p>Domain video dự kiến: xoá nền video, cắt/nén clip… Cấu trúc đã sẵn sàng để mở rộng.</p>
+    <span class="tag">coming soon</span>
+  </div>
+</div>
+{% endblock %}
