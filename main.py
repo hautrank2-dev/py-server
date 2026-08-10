@@ -4,8 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
-from services.image import convert_img
-from services.background import remove_background
+from services import image_svc
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -52,7 +51,7 @@ async def convert_endpoint(
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        buf, content_type, out_name = convert_img(
+        buf, content_type, out_name = image_svc.convert_img(
             raw, ext, filename=file.filename, quality=quality
         )
     except ValueError as ve:
@@ -75,7 +74,7 @@ async def remove_bg_endpoint(
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        buf, content_type, out_name = remove_background(
+        buf, content_type, out_name = image_svc.remove_bg(
             raw, filename=file.filename, model=model, alpha_matting=alpha_matting
         )
     except ValueError as ve:
