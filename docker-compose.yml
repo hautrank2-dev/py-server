@@ -1,0 +1,23 @@
+services:
+  api:
+    build: .
+    image: py-server-removebg
+    container_name: py-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Nơi rembg lưu model; trỏ vào volume để đổi model runtime vẫn được giữ lại
+      - U2NET_HOME=/models/u2net
+    volumes:
+      # Giữ cache model giữa các lần chạy (model đã được bake sẵn trong image)
+      - models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/').status==200 else sys.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  models:
