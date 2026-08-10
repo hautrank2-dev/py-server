@@ -27,5 +27,6 @@ COPY . .
 
 EXPOSE 8000
 
-# Chạy server. Mặc định 1 worker vì mỗi worker load 1 bản model vào RAM (~200MB).
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Chạy server. --app-dir src để code trong src/ import được (from api..., from service...).
+# Mặc định 1 worker vì mỗi worker load 1 bản model vào RAM (~200MB).
+CMD ["uvicorn", "main:app", "--app-dir", "src", "--host", "0.0.0.0", "--port", "8000"]

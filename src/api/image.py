@@ -1,9 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 
-from image import service
+from service import image as image_service
 
-# Tất cả endpoint của domain "image" đều nằm dưới prefix /image
+# Endpoint domain image; prefix /api được thêm ở api/__init__.py -> /api/image/...
 router = APIRouter(prefix="/image", tags=["image"])
 
 
@@ -19,7 +19,7 @@ async def convert_endpoint(
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        buf, content_type, out_name = service.convert_img(
+        buf, content_type, out_name = image_service.convert_img(
             raw, ext, filename=file.filename, quality=quality
         )
     except ValueError as ve:
@@ -43,7 +43,7 @@ async def remove_bg_endpoint(
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        buf, content_type, out_name = service.remove_bg(
+        buf, content_type, out_name = image_service.remove_bg(
             raw, filename=file.filename, model=model, alpha_matting=alpha_matting
         )
     except ValueError as ve:

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from image.router import router as image_router
+from api import api_router
 
 app = FastAPI(title="Media Server")
 
@@ -13,9 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Domain routers
-app.include_router(image_router)
-# app.include_router(video_router)  # sau này thêm domain video ở đây
+app.include_router(api_router)
 
 
 @app.get("/")

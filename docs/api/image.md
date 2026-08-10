@@ -2,16 +2,16 @@
 
 API xử lý ảnh: đổi định dạng và xoá nền (background removal).
 
-- **Base path:** `/image`
+- **Base path:** `/api/image`
 - **Tag (Swagger):** `image`
 - **Swagger UI:** `GET /docs` · **OpenAPI JSON:** `GET /openapi.json`
 
 > Nếu deploy sau reverse proxy / tailscale serve với một path prefix (ví dụ `/tenmoi`),
-> URL đầy đủ sẽ là `https://<host>/tenmoi/image/...`.
+> URL đầy đủ sẽ là `https://<host>/tenmoi/api/image/...`.
 
 ---
 
-## POST `/image/convert`
+## POST `/api/image/convert`
 
 Đổi định dạng ảnh sang `jpg | jpeg | png | webp | bmp | tiff`.
 
@@ -32,7 +32,7 @@ API xử lý ảnh: đổi định dạng và xoá nền (background removal).
 ### Ví dụ
 
 ```bash
-curl -X POST http://localhost:8000/image/convert \
+curl -X POST http://localhost:8000/api/image/convert \
   -F "file=@avatar.jpg" \
   -F "ext=webp" \
   -F "quality=85" \
@@ -41,7 +41,7 @@ curl -X POST http://localhost:8000/image/convert \
 
 ---
 
-## POST `/image/remove-bg`
+## POST `/api/image/remove-bg`
 
 Xoá nền ảnh bằng AI (thư viện [`rembg`](https://github.com/danielgatis/rembg), model ONNX U2Net).
 Kết quả luôn là **PNG có nền trong suốt**.
@@ -63,7 +63,7 @@ Kết quả luôn là **PNG có nền trong suốt**.
 ### Ví dụ
 
 ```bash
-curl -X POST http://localhost:8000/image/remove-bg \
+curl -X POST http://localhost:8000/api/image/remove-bg \
   -F "file=@avatar.jpg" \
   -F "model=u2net" \
   -o avatar_nobg.png
@@ -72,7 +72,7 @@ curl -X POST http://localhost:8000/image/remove-bg \
 Bật alpha matting cho viền mượt hơn:
 
 ```bash
-curl -X POST http://localhost:8000/image/remove-bg \
+curl -X POST http://localhost:8000/api/image/remove-bg \
   -F "file=@avatar.jpg" \
   -F "alpha_matting=true" \
   -o avatar_nobg.png
@@ -103,18 +103,32 @@ Ví dụ:
 
 ---
 
-## Cấu trúc code (domain `image`)
+## Cấu trúc code
+
+Toàn bộ code nằm trong `src/` (giống frontend), chia theo tầng: `api` (routers) và `service` (nghiệp vụ).
 
 ```
-image/
-├── __init__.py
-├── router.py     # định nghĩa endpoint (APIRouter, prefix="/image")
-└── service.py    # xử lý nghiệp vụ: convert_img(), remove_bg()
+src/
+├── main.py         # entrypoint: FastAPI app + CORS + mount router
+├── api/
+│   ├── __init__.py # api_router, prefix="/api", gộp các router con
+│   └── image.py    # endpoint image (APIRouter, prefix="/image") -> /api/image/...
+└── service/
+    ├── __init__.py
+    └── image.py    # xử lý nghiệp vụ: convert_img(), remove_bg()
 ```
 
-`main.py` chỉ mount router:
+`main.py` chỉ mount router tổng:
 
 ```python
-from image.router import router as image_router
-app.include_router(image_router)
+from api import api_router
+app.include_router(api_router)
+```
+
+### Chạy local
+
+Vì code nằm trong `src/`, chạy uvicorn với `--app-dir src`:
+
+```bash
+uvicorn main:app --app-dir src --reload
 ```
