@@ -4,6 +4,8 @@ from functools import lru_cache
 from PIL import Image
 from rembg import remove, new_session
 
+from schemas.image import FileResultDto
+
 
 # ======================= Convert format =======================
 
@@ -18,7 +20,9 @@ EXT_META = {
 
 
 # Convert all imgs from any extension to .jpg
-def convert_img(img_bytes: bytes, ext: str, filename: str = "image", quality: int = 90):
+def convert_img(
+    img_bytes: bytes, ext: str, filename: str = "image", quality: int = 90
+) -> FileResultDto:
     """
     Convert image bytes to another format.
 
@@ -29,7 +33,7 @@ def convert_img(img_bytes: bytes, ext: str, filename: str = "image", quality: in
         quality (int): chất lượng cho JPEG/WEBP (1–100)
 
     Returns:
-        (BytesIO, str, str): buffer, content_type, out_filename
+        FileResultDto: buffer, content_type, filename
     """
 
     ext = ext.lower().strip()
@@ -62,7 +66,7 @@ def convert_img(img_bytes: bytes, ext: str, filename: str = "image", quality: in
     buf.seek(0)
 
     out_name = f"{filename.rsplit('.',1)[0]}.{ 'jpg' if ext=='jpeg' else ext }"
-    return buf, content_type, out_name
+    return FileResultDto(buf, content_type, out_name)
 
 
 def get_img_format(img_bytes: bytes):
@@ -92,7 +96,7 @@ def remove_bg(
     model: str = DEFAULT_MODEL,
     alpha_matting: bool = False,
     crop: bool = False,
-):
+) -> FileResultDto:
     """
     Xoá nền của ảnh, trả về ảnh PNG có nền trong suốt.
 
@@ -104,7 +108,7 @@ def remove_bg(
         crop (bool): cắt sát chủ thể — bỏ phần trong suốt thừa quanh 4 cạnh
 
     Returns:
-        (BytesIO, str, str): buffer, content_type, out_filename
+        FileResultDto: buffer, content_type, filename
     """
     try:
         src = Image.open(BytesIO(img_bytes))
@@ -138,4 +142,4 @@ def remove_bg(
 
     base = filename.rsplit(".", 1)[0] if filename else "image"
     out_name = f"{base}_nobg.png"
-    return buf, "image/png", out_name
+    return FileResultDto(buf, "image/png", out_name)

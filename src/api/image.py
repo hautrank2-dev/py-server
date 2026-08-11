@@ -6,16 +6,25 @@ from fastapi.responses import StreamingResponse
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from service import image as image_service
+from schemas.image import ImageFormatEnum, ErrorResponseModel
+
+# Response lỗi dùng chung cho Swagger
+ERROR_RESPONSES = {
+    400: {"model": ErrorResponseModel},
+    500: {"model": ErrorResponseModel},
+}
 
 # Endpoint domain image; prefix /api được thêm ở api/__init__.py -> /api/image/...
 router = APIRouter(prefix="/image", tags=["image"])
 
 
-@router.post("/convert")
+@router.post("/convert", responses=ERROR_RESPONSES)
 async def convert_endpoint(
     file: UploadFile = File(..., description="Ảnh nguồn"),
-    ext: str = Form(..., description="Định dạng đầu ra: jpg|jpeg|png|webp|bmp|tiff"),
-    quality: int = Form(90, description="Chất lượng cho JPEG/WEBP (1–100)"),
+    ext: ImageFormatEnum = Form(..., description="Định dạng đầu ra"),
+    quality: int = Form(
+        90, ge=1, le=100, description="Chất lượng cho JPEG/WEBP (1–100)"
+    ),
 ):
     """Đổi định dạng ảnh sang jpg/png/webp/bmp/tiff."""
     raw = await file.read()
@@ -23,35 +32,38 @@ async def convert_endpoint(
         raise HTTPException(status_code=400, detail="Empty file")
 
     try:
-        buf, content_type, out_name = image_service.convert_img(
-            raw, ext, filename=file.filename, quality=quality
+        result = image_service.convert_img(
+            raw, ext.value, filename=file.filename, quality=quality
         )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Convert failed: {e}")
 
-    headers = {"Content-Disposition": f'attachment; filename="{out_name}"'}
-    return StreamingResponse(buf, media_type=content_type, headers=headers)
+    headers = {"Content-Disposition": f'attachment; filename="{result.filename}"'}
+    return StreamingResponse(
+        result.buffer, media_type=result.content_type, headers=headers
+    )
 
 
-@router.post("/remove-bg")
-async def remove_bg_endpoint(request: Request):
+@router.post("/remove-bg", responses=ERROR_RESPONSES)
+async def remove_bg_endpoint(request: Request, crop: bool = False):
     """
     Xoá nền một hoặc nhiều ảnh, trả về file ZIP.
 
+    Query param:
+        crop (bool): cắt sát chủ thể (bỏ viền trong suốt). Mặc định false.
     Body: multipart/form-data, mỗi phần là { key: <tên>, file: <ảnh> }.
-    Có thể gửi thêm field `crop` (true/false) để cắt sát chủ thể.
     Response: file ZIP, mỗi ảnh đã xoá nền được đặt tên "<key>.png".
     """
     form = await request.form()
 
-    # Field cấu hình dùng chung cho cả batch (không phải file).
-    crop = str(form.get("crop", "")).strip().lower() in ("1", "true", "on", "yes")
-
     # Chỉ lấy các phần là file; key chính là field name trong FormData.
-    files = [(key, value) for key, value in form.multi_items()
-             if isinstance(value, StarletteUploadFile)]
+    files = [
+        (key, value)
+        for key, value in form.multi_items()
+        if isinstance(value, StarletteUploadFile)
+    ]
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
 
@@ -62,14 +74,19 @@ async def remove_bg_endpoint(request: Request):
         for key, upload in files:
             raw = await upload.read()
             if not raw:
-                raise HTTPException(status_code=400, detail=f"Empty file for key '{key}'")
+                raise HTTPException(
+                    status_code=400, detail=f"Empty file for key '{key}'"
+                )
 
+            print("crop", crop)
             try:
-                buf, _, _ = image_service.remove_bg(raw, filename=key, crop=crop)
+                result = image_service.remove_bg(raw, filename=key, crop=crop)
             except ValueError as ve:
                 raise HTTPException(status_code=400, detail=f"[{key}] {ve}")
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"[{key}] Remove background failed: {e}")
+                raise HTTPException(
+                    status_code=500, detail=f"[{key}] Remove background failed: {e}"
+                )
 
             # Lấy key làm tên file; tránh trùng tên nếu có key giống nhau.
             name = f"{key}.png"
@@ -79,7 +96,7 @@ async def remove_bg_endpoint(request: Request):
                 i += 1
             used_names.add(name)
 
-            zf.writestr(name, buf.getvalue())
+            zf.writestr(name, result.buffer.getvalue())
 
     zip_buf.seek(0)
     headers = {"Content-Disposition": 'attachment; filename="avatars-nobg.zip"'}

@@ -1,70 +1,10 @@
-annotated-types==0.7.0
-anyio==4.13.0
-attrs==26.1.0
-certifi==2026.4.22
-charset-normalizer==3.4.9
-click==8.2.1
-colorama==0.4.6
-dnspython==2.7.0
-email_validator==2.2.0
-et_xmlfile==2.0.0
-fastapi-cli==0.0.8
-fastapi-cloud-cli==0.1.5
-fastapi==0.116.1
-flatbuffers==25.12.19
-h11==0.16.0
-httpcore==1.0.9
-httptools==0.6.4
-httpx==0.28.1
-idna==3.15
-ImageIO==2.37.4
-Jinja2==3.1.6
-jsonschema-specifications==2025.9.1
-jsonschema==4.26.0
-lazy-loader==0.5
-llvmlite==0.48.0
-lxml==6.1.1
-markdown-it-py==4.0.0
-MarkupSafe==3.0.2
-mdurl==0.1.2
-networkx==3.6.1
-numba==0.66.0
-numpy==2.4.6
-onnxruntime==1.28.0
-openpyxl==3.1.5
-packaging==26.3
-pillow==12.3.0
-platformdirs==4.11.1
-pooch==1.9.0
-protobuf==7.35.1
-pydantic==2.11.7
-pydantic_core==2.33.2
-Pygments==2.19.2
-PyMatting==1.1.15
-pypdf==6.13.3
-python-docx==1.2.0
-python-dotenv==1.1.1
-python-multipart==0.0.20
-PyYAML==6.0.2
-referencing==0.37.0
-rembg==2.0.78
-requests==2.34.2
-rich-toolkit==0.15.0
-rich==14.1.0
-rignore==0.6.4
-rpds-py==2026.6.3
-scikit-image==0.26.0
-scipy==1.18.0
-sentry-sdk==2.35.0
-shellingham==1.5.4
-sniffio==1.3.1
-starlette==0.47.2
-tifffile==2026.7.31
-tqdm==4.70.0
-typer==0.16.0
-typing-inspection==0.4.1
-typing_extensions==4.15.0
-urllib3==2.7.0
-uvicorn==0.35.0
-watchfiles==1.1.0
-websockets==15.0.1
+# Chỉ các dependency mà project thực sự dùng.
+# Không pin cứng để pip tự chọn bản wheel phù hợp với Python đang chạy
+# (tránh phải biên dịch từ source khi thiếu compiler).
+
+fastapi
+uvicorn
+python-multipart      # xử lý upload file / form
+jinja2                # render template trang demo
+pillow                # xử lý ảnh
+rembg[cpu]            # xoá nền (kéo theo onnxruntime, numpy, scipy, scikit-image, numba...)
