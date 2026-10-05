@@ -8,3 +8,4 @@ python-multipart      # xử lý upload file / form
 jinja2                # render template trang demo
 pillow                # xử lý ảnh
 rembg[cpu]            # xoá nền (kéo theo onnxruntime, numpy, scipy, scikit-image, numba...)
+imageio-ffmpeg        # kèm sẵn binary ffmpeg (tạo luồng HLS), không cần cài ffmpeg lên máy
