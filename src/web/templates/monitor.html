@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Camera Monitor — AI Media Server{% endblock %}
+
+{% block content %}
+<section class="monitor-page">
+  <div class="monitor-heading">
+    <div>
+      <p class="monitor-eyebrow">LIVE SURVEILLANCE</p>
+      <h1>Camera monitor</h1>
+      <p class="monitor-subtitle">Theo dõi nhiều luồng HLS trong cùng một màn hình.</p>
+    </div>
+    <div class="monitor-summary">
+      <span class="live-indicator"><i></i> LIVE</span>
+      <span>{{ cameras|length }} camera</span>
+      <span id="clock">--:--:--</span>
+    </div>
+  </div>
+
+  <div class="monitor-toolbar">
+    <div class="monitor-status"><span class="status-dot"></span><span id="connection-summary">Đang kết nối camera…</span></div>
+    <div class="layout-controls" aria-label="Số cột camera">
+      <span>Giao diện</span>
+      <button type="button" data-columns="2" aria-label="2 cột">2</button>
+      <button type="button" data-columns="3" aria-label="3 cột">3</button>
+      <button type="button" data-columns="4" aria-label="4 cột">4</button>
+    </div>
+  </div>
+
+  <section class="camera-grid" id="camera-grid" style="--camera-columns: 2" aria-label="Danh sách camera">
+    {% for camera in cameras %}
+    <article class="camera-card" data-camera-id="{{ camera.id }}" data-stream="/api/hls/car-parking_23s/index.m3u8">
+      <div class="camera-video-wrap">
+        <video class="camera-video" autoplay muted playsinline preload="none" aria-label="{{ camera.name }}"></video>
+        <div class="camera-placeholder">
+          <span class="camera-placeholder-icon">◉</span>
+          <span>Đang kết nối…</span>
+        </div>
+        <div class="camera-overlay">
+          <span class="camera-live"><i></i> LIVE</span>
+          <button class="camera-expand" type="button" aria-label="Mở rộng {{ camera.name }}" title="Mở rộng">⛶</button>
+        </div>
+        <div class="camera-error" hidden></div>
+        <div class="camera-controls">
+          <button class="camera-audio" type="button" aria-label="Bật tiếng" title="Bật tiếng">🔇</button>
+          <span class="camera-resolution">HLS · AUTO</span>
+        </div>
+      </div>
+      <div class="camera-meta">
+        <div>
+          <div class="camera-name">{{ camera.name }}</div>
+          <div class="camera-location">{{ camera.location }}</div>
+        </div>
+        <span class="camera-id">{{ camera.id }}</span>
+      </div>
+    </article>
+    {% endfor %}
+  </section>
+
+  <p class="monitor-note">Bản demo hiện dùng cùng một video cho cả 4 ô. Mỗi ô vẫn tạo một HLS player riêng để mô phỏng tải giải mã của màn hình nhiều camera.</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+<script>
+(() => {
+  const grid = document.getElementById("camera-grid");
+  const cards = [...grid.querySelectorAll(".camera-card")];
+  const players = [];
+  const states = new Map(cards.map(card => [card.dataset.cameraId, "connecting"]));
+  const summary = document.getElementById("connection-summary");
+
+  function renderSummary() {
+    const connected = [...states.values()].filter(value => value === "live").length;
+    const failed = [...states.values()].filter(value => value === "error").length;
+    if (connected === cards.length) summary.textContent = connected + "/" + cards.length + " camera đang trực tiếp";
+    else if (failed) summary.textContent = connected + "/" + cards.length + " đang trực tiếp · " + failed + " lỗi";
+    else summary.textContent = "Đang kết nối " + connected + "/" + cards.length + " camera…";
+  }
+
+  function setState(card, state, message = "") {
+    states.set(card.dataset.cameraId, state);
+    card.dataset.state = state;
+    const error = card.querySelector(".camera-error");
+    error.hidden = !message;
+    error.textContent = message;
+    const placeholder = card.querySelector(".camera-placeholder");
+    placeholder.hidden = state === "live";
+    renderSummary();
+  }
+
+  for (const card of cards) {
+    const video = card.querySelector("video");
+    const streamUrl = card.dataset.stream;
+    video.muted = true;
+
+    if (window.Hls && Hls.isSupported()) {
+      const hls = new Hls({
+        liveSyncDurationCount: 3,
+        maxBufferLength: 12,
+        backBufferLength: 12,
+      });
+      players.push(hls);
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      hls.on(Hls.Events.FRAG_BUFFERED, () => setState(card, "live"));
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          setState(card, "connecting", "Mất kết nối · đang thử lại");
+          hls.startLoad();
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          setState(card, "connecting", "Đang khôi phục bộ giải mã");
+          hls.recoverMediaError();
+        } else {
+          setState(card, "error", "Không thể phát luồng HLS");
+          hls.destroy();
+        }
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = streamUrl;
+      video.addEventListener("playing", () => setState(card, "live"), { once: true });
+      video.addEventListener("error", () => setState(card, "error", "Không thể phát luồng HLS"));
+      video.play().catch(() => {});
+    } else {
+      setState(card, "error", "Không tải được hls.js hoặc trình duyệt không hỗ trợ HLS");
+    }
+
+    card.querySelector(".camera-audio").addEventListener("click", event => {
+      video.muted = !video.muted;
+      event.currentTarget.textContent = video.muted ? "🔇" : "🔊";
+      event.currentTarget.setAttribute("aria-label", video.muted ? "Bật tiếng" : "Tắt tiếng");
+    });
+
+    card.querySelector(".camera-expand").addEventListener("click", async () => {
+      try {
+        if (!document.fullscreenElement) await card.requestFullscreen();
+        else await document.exitFullscreen();
+      } catch (_) {}
+    });
+  }
+
+  let requestedColumns = 2;
+  function applyColumns() {
+    const width = window.innerWidth;
+    const availableColumns = width <= 640 ? 1 : width <= 1050 ? 2 : 4;
+    grid.style.setProperty("--camera-columns", Math.min(requestedColumns, availableColumns));
+  }
+  document.querySelectorAll(".layout-controls button").forEach(button => {
+    button.addEventListener("click", () => {
+      requestedColumns = Number(button.dataset.columns);
+      applyColumns();
+      document.querySelectorAll(".layout-controls button").forEach(item => {
+        item.classList.toggle("selected", item === button);
+      });
+    });
+  });
+  window.addEventListener("resize", applyColumns);
+  applyColumns();
+
+  const clock = document.getElementById("clock");
+  const updateClock = () => clock.textContent = new Intl.DateTimeFormat("vi-VN", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  }).format(new Date());
+  updateClock();
+  window.setInterval(updateClock, 1000);
+  window.addEventListener("pagehide", () => players.forEach(player => player.destroy()), { once: true });
+})();
+</script>
+{% endblock %}

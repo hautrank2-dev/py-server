@@ -1,8 +1,10 @@
-"""Nghiệp vụ domain video: tạo luồng HLS (playlist .m3u8 + segment .ts) bằng ffmpeg."""
+"""Tạo và phục vụ HLS từ các video nguồn."""
+import math
 import re
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 
 import imageio_ffmpeg
@@ -21,6 +23,8 @@ SEGMENT_SECONDS = 4
 # Chỉ cho phép tên an toàn để không thoát khỏi VIDEO_DIR / HLS_DIR
 NAME_PATTERN = re.compile(r"^[\w-]+$")
 FILE_PATTERN = re.compile(r"^(index\.m3u8|seg_\d{3,}\.ts)$")
+SEGMENT_PATTERN = re.compile(r"^seg_(\d{3,})\.ts$")
+LIVE_WINDOW_SEGMENTS = 6
 
 MEDIA_TYPES = {
     ".m3u8": "application/vnd.apple.mpegurl",
@@ -30,6 +34,7 @@ MEDIA_TYPES = {
 # Mỗi video một lock để 2 request đồng thời không cùng chạy ffmpeg cho một video
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
+_stream_started_at = time.monotonic()
 
 
 def _get_lock(name: str) -> threading.Lock:
@@ -58,25 +63,9 @@ def _build_hls(source: Path, out_dir: Path) -> None:
         raise RuntimeError(proc.stderr.strip()[-500:] or "ffmpeg failed")
 
 
-def get_hls_file(name: str, filename: str) -> Path:
-    """
-    Trả về đường dẫn một file của luồng HLS; tự tạo luồng ở lần gọi đầu.
-
-    Args:
-        name (str): tên video nguồn, không kèm đuôi (public/video/<name>.mp4)
-        filename (str): "index.m3u8" hoặc tên segment "seg_NNN.ts"
-
-    Returns:
-        Path: file trong storage/hls/<name>/
-
-    Raises:
-        ValueError: `name` hoặc `filename` không hợp lệ
-        FileNotFoundError: không có video nguồn hoặc không có segment đó
-    """
+def _ensure_hls(name: str) -> Path:
     if not NAME_PATTERN.match(name):
         raise ValueError("Invalid video name")
-    if not FILE_PATTERN.match(filename):
-        raise ValueError("Invalid HLS file name")
 
     source = VIDEO_DIR / f"{name}.mp4"
     if not source.is_file():
@@ -99,7 +88,64 @@ def get_hls_file(name: str, filename: str) -> Path:
             finally:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    path = out_dir / filename
+    return out_dir
+
+
+def _source_segments(name: str) -> tuple[Path, list[float]]:
+    out_dir = _ensure_hls(name)
+    durations = []
+    for line in (out_dir / PLAYLIST_NAME).read_text(encoding="utf-8").splitlines():
+        if line.startswith("#EXTINF:"):
+            durations.append(float(line.split(":", 1)[1].split(",", 1)[0]))
+    if not durations:
+        raise RuntimeError("Generated HLS playlist contains no segments")
+    return out_dir, durations
+
+
+def get_live_playlist(name: str) -> str:
+    """Build a sliding live playlist that loops the cached source segments forever."""
+    _, durations = _source_segments(name)
+    cycle_duration = sum(durations)
+    initial_offset = sum(durations[:LIVE_WINDOW_SEGMENTS - 1])
+    elapsed = max(0.0, time.monotonic() - _stream_started_at) + initial_offset
+    cycle = int(elapsed // cycle_duration)
+    position = elapsed % cycle_duration
+    segment_in_cycle = 0
+    for duration in durations:
+        if position < duration:
+            break
+        position -= duration
+        segment_in_cycle += 1
+    current_sequence = cycle * len(durations) + segment_in_cycle
+    first_sequence = max(0, current_sequence - LIVE_WINDOW_SEGMENTS + 1)
+    target_duration = math.ceil(max(durations))
+
+    lines = [
+        "#EXTM3U",
+        "#EXT-X-VERSION:3",
+        f"#EXT-X-TARGETDURATION:{target_duration}",
+        f"#EXT-X-MEDIA-SEQUENCE:{first_sequence}",
+    ]
+    for sequence in range(first_sequence, current_sequence + 1):
+        if sequence > 0 and sequence % len(durations) == 0:
+            lines.append("#EXT-X-DISCONTINUITY")
+        source_index = sequence % len(durations)
+        lines.extend((f"#EXTINF:{durations[source_index]:.6f},", f"seg_{sequence:06d}.ts"))
+    return "\n".join(lines) + "\n"
+
+
+def get_hls_file(name: str, filename: str) -> Path:
+    """Resolve a virtual live segment to the corresponding cached source segment."""
+    if not FILE_PATTERN.match(filename):
+        raise ValueError("Invalid HLS file name")
+    out_dir, durations = _source_segments(name)
+    if filename == PLAYLIST_NAME:
+        return out_dir / PLAYLIST_NAME
+    match = SEGMENT_PATTERN.match(filename)
+    if not match:
+        raise ValueError("Invalid HLS file name")
+    source_index = int(match.group(1)) % len(durations)
+    path = out_dir / f"seg_{source_index:03d}.ts"
     if not path.is_file():
         raise FileNotFoundError(f"HLS file '{filename}' not found")
     return path

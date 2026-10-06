@@ -4,7 +4,7 @@ API video: phát một video có sẵn dưới dạng **luồng HLS** (playlist 
 
 | Mục | Giá trị |
 |-----|---------|
-| Base path | `/api/video` |
+| Base path | `/api/hls` |
 | Tag (Swagger) | `video` |
 | Auth | Không yêu cầu |
 | CORS | Cho phép tất cả origin |
@@ -22,14 +22,14 @@ public/video/car-parking_23s.mp4   ->   GET /video/car-parking_23s.mp4
 
 ---
 
-# GET `/api/video/hls/{name}/{filename}`
+# GET `/api/hls/{name}/{filename}`
 
 Luồng HLS của video nguồn `public/video/<name>.mp4`.
 
 Player chỉ cần URL của playlist; các segment được player tự tải qua cùng endpoint này:
 
 ```
-/api/video/hls/car-parking_23s/index.m3u8
+/api/hls/car-parking_23s/index.m3u8
 ```
 
 ## Path params
@@ -41,16 +41,18 @@ Player chỉ cần URL của playlist; các segment được player tự tải q
 
 ## Hành vi
 
-- **Lần gọi đầu** cho một video: server chạy ffmpeg tạo luồng rồi mới trả về, nên request này chậm hơn (tuỳ độ dài video). Kết quả được cache ở `storage/hls/<name>/`, các lần sau trả file ngay.
+- **Lần gọi đầu** cho một video: server chạy ffmpeg để tạo các segment nguồn rồi cache ở `storage/hls/<name>/`; request này chậm hơn (tuỳ độ dài video).
 - Nếu file nguồn được thay bằng bản mới hơn, luồng tự được tạo lại.
-- Video được encode lại **H.264 + AAC**, một mức chất lượng (giữ nguyên độ phân giải gốc), mỗi segment **4 giây**, playlist kiểu **VOD**.
+- Video được encode lại **H.264 + AAC**, một mức chất lượng (giữ nguyên độ phân giải gốc), mỗi segment khoảng **4 giây**.
+- Playlist trả về là playlist **live** có cửa sổ trượt 6 segment và không có `#EXT-X-ENDLIST`. Server lặp lại các segment của video nguồn vô hạn, vì vậy HLS player tiếp tục tải playlist như một camera live.
+- Đây là live stream mô phỏng từ một file video; không phải nguồn camera thời gian thực.
 
 ## Response `200 OK`
 
 | `filename` | `Content-Type` | Body |
 |------------|----------------|------|
-| `index.m3u8` | `application/vnd.apple.mpegurl` | Playlist (text) |
-| `seg_NNN.ts` | `video/mp2t` | Segment MPEG-TS (binary) |
+| `index.m3u8` | `application/vnd.apple.mpegurl` | Playlist live được tạo theo thời gian |
+| `seg_NNN.ts` | `video/mp2t` | Segment MPEG-TS; số segment trong URL tiếp tục tăng và được ánh xạ vòng về video nguồn |
 
 Khác với Image API, response **không** có `Content-Disposition: attachment` vì file dùng để phát trực tiếp.
 
@@ -69,13 +71,13 @@ Khác với Image API, response **không** có `Content-Disposition: attachment`
 **cURL:**
 
 ```bash
-curl http://localhost:8000/api/video/hls/car-parking_23s/index.m3u8
+curl http://localhost:8000/api/hls/car-parking_23s/index.m3u8
 ```
 
 **Trình duyệt (hls.js)** — Chrome/Firefox desktop không phát HLS trực tiếp, Safari thì có:
 
 ```js
-const src = "/api/video/hls/car-parking_23s/index.m3u8";
+const src = "/api/hls/car-parking_23s/index.m3u8";
 const video = document.querySelector("video");
 
 if (video.canPlayType("application/vnd.apple.mpegurl")) {
@@ -97,6 +99,6 @@ if (video.canPlayType("application/vnd.apple.mpegurl")) {
 
 ```
 src/
-├── api/video.py       # endpoint (prefix "/video") -> /api/video/...
-└── service/video.py   # nghiệp vụ: get_hls_file() gọi ffmpeg
+├── api/hls.py         # endpoint (prefix "/hls") -> /api/hls/...
+└── service/hls.py     # tạo segment nguồn và playlist live lặp vô hạn
 ```
