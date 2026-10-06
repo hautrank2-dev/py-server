@@ -5,7 +5,6 @@ FROM python:3.12-slim
 # Biến môi trường cho Python & vị trí lưu model rembg
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
     U2NET_HOME=/models/u2net
 
 WORKDIR /app
@@ -15,12 +14,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài dependencies trước (tận dụng cache layer khi code thay đổi)
-COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Tải sẵn model u2net (~176MB) vào image để request đầu tiên không phải chờ tải.
+# Đặt TRƯỚC bước cài dependencies: đổi requirements.txt không làm tải lại model.
+ADD https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx /models/u2net/u2net.onnx
 
-# Tải sẵn model u2net (~176MB) vào image để request đầu tiên không phải chờ tải
-RUN python -c "from rembg import new_session; new_session('u2net')"
+# Cài dependencies trước khi copy code (tận dụng cache layer khi code thay đổi).
+# Cache mount giữ các wheel đã tải giữa các lần build -> đổi requirements.txt chỉ tải gói mới.
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
 
 # Copy source code
 COPY . .

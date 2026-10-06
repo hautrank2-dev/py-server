@@ -13,3 +13,6 @@ docker-compose.yml
 .dockerignore
 README*.md
 storage
+.agents
+.claude
+docs
