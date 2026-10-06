@@ -16,9 +16,6 @@ jobs:
       - name: Test
         run: |
           echo "RUNNER WORKS"
-          hostname
-          whoami
-          pwd
 
       - name: Deploy
         run: |
