@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64]
 
     steps:
       - name: Checkout
@@ -15,7 +15,10 @@ jobs:
 
       - name: Test
         run: |
-          echo "Hello from self-hosted runner!"
+          echo "RUNNER WORKS"
+          hostname
+          whoami
+          pwd
 
       - name: Deploy
         run: |
